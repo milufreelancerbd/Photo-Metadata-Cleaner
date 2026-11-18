@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Photo metadata cleaner</title>
+<meta name="theme-color" content="#EDEBE4">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Photo Cleaner">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root {
+    --paper: #EDEBE4;
+    --panel: #FBFAF7;
+    --ink: #1E2323;
+    --ink-soft: #5B5F5A;
+    --rule: #C9C6BC;
+    --rule-strong: #A8A498;
+    --stamp: #B23A2E;
+    --stamp-bg: #F3E3E0;
+    --ok: #4B6B4F;
+    --ok-bg: #E4EAE2;
+    --radius: 3px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.5;
+  }
+
+  .wrap {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: calc(48px + env(safe-area-inset-top, 0px)) 24px calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+
+  header h1 {
+    font-size: 1.7rem;
+    font-weight: 600;
+    margin: 0 0 8px;
+    max-width: 34ch;
+  }
+
+  header p {
+    color: var(--ink-soft);
+    margin: 0 0 40px;
+    max-width: 52ch;
+    font-size: 1rem;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 0;
+    border: 1px solid var(--rule-strong);
+    background: var(--panel);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  @media (max-width: 720px) {
+    .wrap { padding: calc(28px + env(safe-area-inset-top, 0px)) 16px calc(40px + env(safe-area-inset-bottom, 0px)); }
+    header h1 { font-size: 1.4rem; }
+    header p { margin-bottom: 24px; }
+    .panel-left, .panel-right { padding: 20px; }
+    .dropzone { padding: 44px 16px; }
+    button.primary, a.download, button.secondary { width: 100%; text-align: center; padding: 14px 18px; }
+    main { grid-template-columns: 1fr; }
+    .panel-left { border-right: none !important; border-bottom: 1px solid var(--rule); }
+  }
+
+  .panel-left {
+    padding: 28px;
+    border-right: 1px solid var(--rule);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel-right {
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    min-height: 320px;
+  }
+
+  .dropzone {
+    border: 1.5px dashed var(--rule-strong);
+    border-radius: var(--radius);
+    padding: 32px 16px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--ink-soft);
+    transition: border-color 120ms ease, background 120ms ease;
+    outline-offset: 3px;
+  }
+
+  .dropzone:hover,
+  .dropzone.dragging {
+    border-color: var(--stamp);
+    background: #FAF6F5;
+  }
+
+  .dropzone:focus-visible {
+    outline: 2px solid var(--stamp);
+  }
+
+  .dropzone .hint {
+    font-size: 0.85rem;
+    margin-top: 6px;
+  }
+
+  .dropzone.has-image {
+    padding: 0;
+    border-style: solid;
+    cursor: default;
+  }
+
+  .dropzone.has-image:hover { background: none; border-color: var(--rule-strong); }
+
+  #preview-img {
+    display: block;
+    width: 100%;
+    max-height: 320px;
+    object-fit: contain;
+    background: repeating-conic-gradient(#EFEDE7 0% 25%, #E5E3DC 0% 50%) 50% / 16px 16px;
+  }
+
+  .file-meta {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    margin-top: 14px;
+    word-break: break-all;
+  }
+
+  .choose-again {
+    background: none;
+    border: none;
+    color: var(--stamp);
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 0;
+    margin-top: 10px;
+    text-decoration: underline;
+  }
+
+  input[type=file] { display: none; }
+
+  h2 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 14px;
+  }
+
+  #tag-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    flex: 1;
+  }
+
+  .tag-empty {
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+  }
+
+  .tag-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: 0.88rem;
+  }
+
+  .tag-row:last-child { border-bottom: none; }
+
+  .tag-mark {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.02em;
+    color: var(--stamp);
+    background: var(--stamp-bg);
+    border-radius: var(--radius);
+    padding: 2px 6px;
+    flex-shrink: 0;
+    transition: background 200ms ease, color 200ms ease;
+  }
+
+  .tag-row.redacted .tag-mark {
+    color: var(--ok);
+    background: var(--ok-bg);
+  }
+
+  .tag-row.redacted .tag-mark::after { content: ' removed'; }
+  .tag-row:not(.redacted) .tag-mark::after { content: ' found'; }
+  .tag-mark { font-size: 0; }
+  .tag-mark::after { font-size: 0.68rem; }
+
+  .tag-label {
+    color: var(--ink);
+    position: relative;
+  }
+
+  .tag-row.redacted .tag-label {
+    color: var(--ink-soft);
+    text-decoration: line-through;
+    text-decoration-color: var(--rule-strong);
+  }
+
+  button.primary {
+    margin-top: 20px;
+    background: var(--ink);
+    color: var(--panel);
+    border: none;
+    border-radius: var(--radius);
+    padding: 12px 18px;
+    font: inherit;
+    font-weight: 500;
+    font-size: 0.92rem;
+    cursor: pointer;
+  }
+
+  button.primary:disabled {
+    background: var(--rule-strong);
+    cursor: not-allowed;
+  }
+
+  button.primary:not(:disabled):hover { background: #33403F; }
+
+  .status {
+    font-size: 0.85rem;
+    margin-top: 12px;
+    min-height: 1.2em;
+  }
+
+  .status.error { color: var(--stamp); }
+
+  #result {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid var(--rule);
+  }
+
+  #result[hidden] { display: none; }
+
+  #result p {
+    margin: 0 0 12px;
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+  }
+
+  #result strong { color: var(--ink); }
+
+  a.download {
+    display: inline-block;
+    background: var(--ok);
+    color: #fff;
+    text-decoration: none;
+    padding: 10px 16px;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+
+  button.secondary {
+    display: inline-block;
+    background: none;
+    color: var(--ink);
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius);
+    padding: 10px 16px;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+
+  button.secondary[hidden] { display: none; }
+
+  footer {
+    margin-top: 28px;
+    color: var(--ink-soft);
+    font-size: 0.82rem;
+    max-width: 60ch;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Strip hidden data from a photo</h1>
+    <p>Camera details, location, editing history, and content-credential labels — removed in your browser before you share the file anywhere else.</p>
+  </header>
+
+  <main>
+    <div class="panel-left">
+      <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Choose or drop a photo">
+        <div id="dropzone-empty">
+          <div>Drop a photo here, or choose a file</div>
+          <div class="hint">JPEG, PNG, or WebP · stays on this device</div>
+        </div>
+        <img id="preview-img" alt="" hidden>
+      </div>
+      <div class="file-meta" id="original-size"></div>
+      <button class="choose-again" id="choose-again" hidden type="button">Choose a different photo</button>
+      <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp">
+    </div>
+
+    <div class="panel-right">
+      <h2>What's inside this file</h2>
+      <ul id="tag-list">
+        <li class="tag-empty">Choose a photo to see what it's carrying.</li>
+      </ul>
+      <button class="primary" id="clean-btn" disabled type="button">Clean image</button>
+      <div class="status" id="status"></div>
+      <div id="result" hidden>
+        <p><strong id="clean-size"></strong> — <span id="tag-count"></span> tag(s) removed, image otherwise unchanged.</p>
+        <a class="download" id="download-link" download>Download cleaned photo</a>
+        <button class="secondary" id="share-btn" type="button" hidden>Share or save to gallery</button>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    Everything above runs locally in your browser. The photo is never uploaded anywhere. Cleaning works by redrawing the image onto a canvas and re-exporting it, so no original metadata segment survives — including content-credential (C2PA) data, which is where an AI-generation label would be stored.
+  </footer>
+</div>
+
+<script>
+  // ---------- byte helpers ----------
+  function readString(view, offset, length) {
+    let s = '';
+    for (let i = 0; i < length; i++) {
+      if (offset + i >= view.byteLength) break;
+      s += String.fromCharCode(view.getUint8(offset + i));
+    }
+    return s;
+  }
+
+  function readNullTerminatedString(view, offset, maxLen) {
+    let s = '';
+    for (let i = 0; i < maxLen; i++) {
+      if (offset + i >= view.byteLength) break;
+      const b = view.getUint8(offset + i);
+      if (b === 0) break;
+      s += String.fromCharCode(b);
+    }
+    return s;
+  }
+
+  // ---------- format-specific tag detection ----------
+  function detectJPEGTags(buffer) {
+    const view = new DataView(buffer);
+    const tags = [];
+    if (view.byteLength < 4 || view.getUint16(0) !== 0xFFD8) return tags;
+    let offset = 2;
+    while (offset + 4 <= view.byteLength) {
+      if (view.getUint8(offset) !== 0xFF) { offset++; continue; }
+      const marker = view.getUint8(offset + 1);
+      if (marker === 0xD8 || marker === 0xD9 || marker === 0x01 || (marker >= 0xD0 && marker <= 0xD7)) {
+        offset += 2;
+        continue;
+      }
+      if (marker === 0xDA) break; // entropy-coded scan data begins
+      const length = view.getUint16(offset + 2);
+      if (length < 2) break;
+      const dataStart = offset + 4;
+
+      if (marker === 0xE1) {
+        const exifSig = readString(view, dataStart, 6);
+        if (exifSig.indexOf('Exif') === 0) {
+          tags.push({ id: 'exif', label: 'EXIF — camera, settings, GPS location' });
+        } else {
+          const xmpSig = readString(view, dataStart, 29);
+          if (xmpSig.indexOf('http://ns.adobe.com/xap/') === 0) {
+            tags.push({ id: 'xmp', label: 'XMP metadata' });
+          }
+        }
+      } else if (marker === 0xE2) {
+        const iccSig = readString(view, dataStart, 11);
+        if (iccSig.indexOf('ICC_PROFILE') === 0) {
+          tags.push({ id: 'icc', label: 'Embedded color profile (ICC)' });
+        }
+      } else if (marker === 0xEB) {
+        tags.push({ id: 'c2pa', label: 'Content-credentials data (APP11) — likely includes an AI-generation label' });
+      } else if (marker === 0xFE) {
+        tags.push({ id: 'com', label: 'Text comment' });
+      }
+
+      offset = dataStart + length - 2;
+    }
+    return tags;
+  }
+
+  function detectPNGTags(buffer) {
+    const view = new DataView(buffer);
+    const tags = [];
+    const sig = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    if (view.byteLength < 8) return tags;
+    for (let i = 0; i < 8; i++) if (view.getUint8(i) !== sig[i]) return tags;
+
+    let offset = 8;
+    while (offset + 8 <= view.byteLength) {
+      const length = view.getUint32(offset);
+      const type = readString(view, offset + 4, 4);
+      const dataStart = offset + 8;
+      if (type === 'IEND') break;
+
+      if (type === 'tEXt' || type === 'iTXt' || type === 'zTXt') {
+        const keyword = readNullTerminatedString(view, dataStart, 80);
+        if (keyword === 'XML:com.adobe.xmp') {
+          tags.push({ id: 'xmp', label: 'XMP metadata' });
+        } else {
+          tags.push({ id: 'text', label: 'Text field — "' + (keyword || 'untitled') + '"' });
+        }
+      } else if (type === 'eXIf') {
+        tags.push({ id: 'exif', label: 'EXIF — camera, settings, GPS location' });
+      } else if (type === 'caBX') {
+        tags.push({ id: 'c2pa', label: 'Content-credentials data (caBX) — likely includes an AI-generation label' });
+      } else if (type === 'iCCP') {
+        tags.push({ id: 'icc', label: 'Embedded color profile (ICC)' });
+      }
+
+      offset = dataStart + length + 4; // + 4-byte CRC
+      if (length < 0 || !Number.isFinite(length)) break;
+    }
+    return tags;
+  }
+
+  function detectWebPTags(buffer) {
+    const view = new DataView(buffer);
+    const tags = [];
+    if (view.byteLength < 16) return tags;
+    if (readString(view, 0, 4) !== 'RIFF' || readString(view, 8, 4) !== 'WEBP') return tags;
+
+    let offset = 12;
+    while (offset + 8 <= view.byteLength) {
+      const fourcc = readString(view, offset, 4);
+      const size = view.getUint32(offset + 4, true); // RIFF sizes are little-endian
+      if (fourcc === 'EXIF') tags.push({ id: 'exif', label: 'EXIF — camera, settings, GPS location' });
+      if (fourcc === 'XMP ') tags.push({ id: 'xmp', label: 'XMP metadata' });
+      offset += 8 + size + (size % 2);
+      if (size < 0 || !Number.isFinite(size)) break;
+    }
+    return tags;
+  }
+
+  function detectTags(buffer) {
+    try {
+      const view = new DataView(buffer);
+      if (view.byteLength >= 2 && view.getUint16(0) === 0xFFD8) return detectJPEGTags(buffer);
+      if (view.byteLength >= 8 && view.getUint32(0) === 0x89504E47) return detectPNGTags(buffer);
+      if (view.byteLength >= 12 && readString(view, 0, 4) === 'RIFF') return detectWebPTags(buffer);
+    } catch (e) { /* fall through */ }
+    return [];
+  }
+
+  // ---------- cleaning: redraw through canvas, export fresh ----------
+  function cleanImage(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const mime = file.type === 'image/png' ? 'image/png'
+          : file.type === 'image/webp' ? 'image/webp' : 'image/jpeg';
+        canvas.toBlob((blob) => {
+          URL.revokeObjectURL(url);
+          blob ? resolve(blob) : reject(new Error('the browser could not export this image'));
+        }, mime, mime === 'image/jpeg' ? 0.95 : undefined);
+      };
+      img.onerror = () => reject(new Error('the browser could not decode this file'));
+      img.src = url;
+    });
+  }
+
+  function extensionFor(mime) {
+    if (mime === 'image/png') return '.png';
+    if (mime === 'image/webp') return '.webp';
+    return '.jpg';
+  }
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+  // ---------- UI wiring ----------
+  const dropzone = document.getElementById('dropzone');
+  const dropzoneEmpty = document.getElementById('dropzone-empty');
+  const fileInput = document.getElementById('file-input');
+  const previewImg = document.getElementById('preview-img');
+  const tagList = document.getElementById('tag-list');
+  const cleanBtn = document.getElementById('clean-btn');
+  const statusEl = document.getElementById('status');
+  const resultEl = document.getElementById('result');
+  const originalSizeEl = document.getElementById('original-size');
+  const chooseAgainBtn = document.getElementById('choose-again');
+
+  const shareBtn = document.getElementById('share-btn');
+  let cleanedFile = null;
+  let currentFile = null;
+  let currentTags = [];
+
+  function setStatus(msg, isError) {
+    statusEl.textContent = msg || '';
+    statusEl.className = 'status' + (isError ? ' error' : '');
+  }
+
+  function renderTags(tags) {
+    tagList.innerHTML = '';
+    if (tags.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'tag-empty';
+      li.textContent = "No metadata found in the file's headers — cleaning will still re-encode the image to be sure.";
+      tagList.appendChild(li);
+      return;
+    }
+    tags.forEach((tag) => {
+      const li = document.createElement('li');
+      li.className = 'tag-row';
+      li.dataset.id = tag.id;
+      const mark = document.createElement('span');
+      mark.className = 'tag-mark';
+      const label = document.createElement('span');
+      label.className = 'tag-label';
+      label.textContent = tag.label;
+      li.appendChild(mark);
+      li.appendChild(label);
+      tagList.appendChild(li);
+    });
+  }
+
+  async function handleFile(file) {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setStatus("That file type isn't supported — use a JPEG, PNG, or WebP.", true);
+      return;
+    }
+    currentFile = file;
+    resultEl.hidden = true;
+    setStatus('');
+
+    dropzone.classList.add('has-image');
+    dropzoneEmpty.hidden = true;
+    previewImg.hidden = false;
+    previewImg.src = URL.createObjectURL(file);
+    chooseAgainBtn.hidden = false;
+    originalSizeEl.textContent = file.name + ' · ' + formatBytes(file.size);
+
+    const buffer = await file.arrayBuffer();
+    currentTags = detectTags(buffer);
+    renderTags(currentTags);
+    cleanBtn.disabled = false;
+    cleanBtn.textContent = 'Clean image';
+  }
+
+  async function cleanCurrentFile() {
+    if (!currentFile) return;
+    cleanBtn.disabled = true;
+    cleanBtn.textContent = 'Cleaning…';
+
+    document.querySelectorAll('.tag-row').forEach((row, i) => {
+      setTimeout(() => row.classList.add('redacted'), i * 90);
+    });
+
+    try {
+      const blob = await cleanImage(currentFile);
+      const url = URL.createObjectURL(blob);
+      const cleanName = currentFile.name.replace(/\.[^.]+$/, '') + '-clean' + extensionFor(blob.type);
+      cleanedFile = new File([blob], cleanName, { type: blob.type });
+      shareBtn.hidden = !(navigator.canShare && navigator.canShare({ files: [cleanedFile] }));
+
+      const link = document.getElementById('download-link');
+      link.href = url;
+      link.download = cleanName;
+
+      document.getElementById('clean-size').textContent = formatBytes(blob.size);
+      document.getElementById('tag-count').textContent = currentTags.length;
+      resultEl.hidden = false;
+      setStatus('');
+    } catch (e) {
+      setStatus('Could not clean that image: ' + e.message, true);
+    } finally {
+      cleanBtn.disabled = false;
+      cleanBtn.textContent = 'Clean image';
+    }
+  }
+
+  ['dragenter', 'dragover'].forEach((evt) =>
+    dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add('dragging'); })
+  );
+  ['dragleave', 'drop'].forEach((evt) =>
+    dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove('dragging'); })
+  );
+  dropzone.addEventListener('drop', (e) => {
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+  });
+  chooseAgainBtn.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) handleFile(fileInput.files[0]);
+  });
+  cleanBtn.addEventListener('click', cleanCurrentFile);
+
+  shareBtn.addEventListener('click', async () => {
+    if (!cleanedFile) return;
+    try {
+      await navigator.share({ files: [cleanedFile] });
+    } catch (e) {
+      if (e.name !== 'AbortError') setStatus('Could not open the share sheet — use Download instead.', true);
+    }
+  });
+
+  // ---------- installable offline app ----------
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+</script>
+</body>
+</html>

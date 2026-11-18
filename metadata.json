@@ -1,0 +1,6 @@
+{
+  "name": "Photo Cleaner",
+  "description": "Remove hidden metadata like location, camera model, date, and content credentials from your photos offline on your device.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
